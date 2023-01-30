@@ -321,6 +321,9 @@ pub(crate) fn f64_to_fastfield_u64(val: f64, field_type: &Type) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
+    use std::net::IpAddr;
+    use std::str::FromStr;
+
     use serde_json::Value;
     use time::OffsetDateTime;
 
@@ -337,7 +340,7 @@ mod tests {
     use crate::aggregation::segment_agg_result::DOC_BLOCK_SIZE;
     use crate::aggregation::DistributedAggregationCollector;
     use crate::query::{AllQuery, TermQuery};
-    use crate::schema::{Cardinality, IndexRecordOption, Schema, TextFieldIndexing, FAST, STRING};
+    use crate::schema::{Cardinality, IndexRecordOption, Schema, TextFieldIndexing, FAST, INDEXED, STORED, STRING, IntoIpv6Addr};
     use crate::{DateTime, Index, Term};
 
     fn get_avg_req(field_name: &str) -> Aggregation {
@@ -666,6 +669,11 @@ mod tests {
         let scores_field_i64 = schema_builder.add_i64_field("scores_i64", multivalue);
 
         let score_field_i64 = schema_builder.add_i64_field("score_i64", score_fieldtype);
+ 
+        let host_field_ip = schema_builder.add_ip_addr_field("host_ip", INDEXED | STORED | FAST);
+        let ip_addr_1 = IpAddr::from_str("127.0.0.10").unwrap().into_ipv6_addr();
+        let ip_addr_2 = IpAddr::from_str("127.0.0.20").unwrap().into_ipv6_addr();
+
         let index = Index::create_in_ram(schema_builder.build());
         {
             let mut index_writer = index.writer_for_tests()?;
@@ -678,6 +686,7 @@ mod tests {
                 score_field_i64 => 1i64,
                 scores_field_i64 => 1i64,
                 scores_field_i64 => 2i64,
+                host_field_ip => ip_addr_1,
             ))?;
             index_writer.add_document(doc!(
                 text_field => "cool",
@@ -687,6 +696,7 @@ mod tests {
                 score_field_i64 => 3i64,
                 scores_field_i64 => 5i64,
                 scores_field_i64 => 5i64,
+                host_field_ip => ip_addr_1,
             ))?;
             index_writer.add_document(doc!(
                 text_field => "cool",
@@ -694,6 +704,7 @@ mod tests {
                 score_field => 5u64,
                 score_field_f64 => 5f64,
                 score_field_i64 => 5i64,
+                host_field_ip => ip_addr_2,
             ))?;
             index_writer.add_document(doc!(
                 text_field => "nohit",
@@ -701,6 +712,7 @@ mod tests {
                 score_field => 6u64,
                 score_field_f64 => 6f64,
                 score_field_i64 => 6i64,
+                host_field_ip => ip_addr_2,
             ))?;
             index_writer.add_document(doc!(
                 text_field => "cool",
@@ -708,6 +720,7 @@ mod tests {
                 score_field => 7u64,
                 score_field_f64 => 7f64,
                 score_field_i64 => 7i64,
+                host_field_ip => ip_addr_2,
             ))?;
             index_writer.commit()?;
             index_writer.add_document(doc!(
@@ -716,6 +729,7 @@ mod tests {
                 score_field => 11u64,
                 score_field_f64 => 11f64,
                 score_field_i64 => 11i64,
+                host_field_ip => ip_addr_1,
             ))?;
             index_writer.add_document(doc!(
                 text_field => "cool",
@@ -723,6 +737,7 @@ mod tests {
                 score_field => 14u64,
                 score_field_f64 => 14f64,
                 score_field_i64 => 14i64,
+                host_field_ip => ip_addr_1,
             ))?;
 
             index_writer.add_document(doc!(
@@ -731,6 +746,7 @@ mod tests {
                 score_field => 44u64,
                 score_field_f64 => 44.5f64,
                 score_field_i64 => 44i64,
+                host_field_ip => ip_addr_2,
             ))?;
 
             index_writer.commit()?;
@@ -742,6 +758,7 @@ mod tests {
                 score_field => 44u64,
                 score_field_f64 => 44.5f64,
                 score_field_i64 => 44i64,
+                host_field_ip => ip_addr_2,
             ))?;
 
             index_writer.commit()?;
@@ -1160,6 +1177,12 @@ mod tests {
         assert_eq!(
             format!("{:?}", agg_res),
             r#"InvalidArgument("Invalid field cardinality on field scores_i64 expected SingleValue, but got MultiValues")"#
+        );
+
+        let agg_res = avg_on_field("host_ip");
+        assert_eq!(
+            format!("{:?}", agg_res),
+            r#"InvalidArgument("Only fast fields of type f64, u64, i64 are supported, but got IpAddr ")"#
         );
 
         Ok(())
